@@ -1,0 +1,1 @@
+I think I found an error in the wikipedia morse code at this point. Compare to here (https://upload.wikimedia.org/wikipedia/commons/c/ca/Morse_code_tree3.png), character `H` should be `-·--·`, but instead they list it as `----` in this table. Meanwhile `----` is equal already to the 'ch' character.
