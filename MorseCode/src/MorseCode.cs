@@ -3,13 +3,17 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text;
 
 namespace MorseCodeNS
 {
 	public class MorseCode
 	{
-		// Morse-code tree image: https://upload.wikimedia.org/wikipedia/commons/c/ca/Morse_code_tree3.png
+		// Morse-code binary tree image: https://upload.wikimedia.org/wikipedia/commons/c/ca/Morse_code_tree3.png
 
+		/// <summary>
+		/// All the morse code data drives from this singular input.
+		/// </summary>
 		public const string BTreeString =
 @"ET
 IANM
@@ -24,21 +28,151 @@ HVFÜLÄPJ BXCYZQÖŠ
 		public static readonly char[][] BTrees;
 
 		/// <summary>
-		/// We never ended up using this, but not to have / to visualize with,
+		/// ! This will contain an EXTREMELY fast reverse lookup table,
+		/// allowing lookup conversions from text to morse code. It's
+		/// extremely doubtful there could be a faster way of doing this.
+		/// Also one huge benefit is this also handles upper and lower case
+		/// so one does not have to upper or lower case input text first.
+		/// One cost is there is a little waste in this table, as it will
+		/// be 354 long, but only 107 of the (jagged) arrays will be set,
+		/// so there will be 247 null values in the 0 level array here.
+		/// But super small beans, and if we were not trying to allow the full
+		/// Morse Code set (i.e. excluding the special characters), this
+		/// would have been much shorter still, but that small cost is worth it.
+		/// <para />
+		/// To use this, one simply has to
+		/// 1) get the integer value for a given char,
+		/// 2) validate that it is less than <see cref="ReverseLookupTableLength"/>, and
+		/// 3) index into this table with that value, thereby
+		/// 4) retrieving and using the boolean array which tells the morse values for
+		/// that char.
+		/// </summary>
+		static readonly RevTableVal[] ReverseLookupTable;
+
+		public const int ReverseLookupTableLength = 354;
+
+		/// <summary>
+		/// We never ended up using this, but nice to have / to visualize with,
 		/// and it still might well be utilized.
 		/// </summary>
 		public static readonly (int rowLen, int flatIdx)[] BinaryRows;
 
-		static MorseCode()
+		/* --- Visual Printout Of Reverse Table (generate with: GetDisplayOfReverseLookupValues) ---
+(omitting the many null ones)
+
+[33] ! ("-.-.--")
+[34] " (".-..-.")
+[39] ' (".----.")
+[40] ( ("-.--.-")
+[43] + (".-.-.")
+[44] , ("--..--")
+[45] - ("-...-.")
+[46] . (".-.-.-")
+[47] / ("-..-.")
+[48] 0 ("-----")
+[49] 1 (".----")
+[50] 2 ("..---")
+[51] 3 ("...--")
+[52] 4 ("....-")
+[53] 5 (".....")
+[54] 6 ("-....")
+[55] 7 ("--...")
+[56] 8 ("---..")
+[57] 9 ("----.")
+[58] : ("---...")
+[59] ; ("-.-.-.")
+[61] = ("-...-")
+[63] ? ("..--..")
+[64] @ (".--.-.")
+[65] A (".-")
+[66] B ("-...")
+[67] C ("-.-.")
+[68] D ("-..")
+[69] E (".")
+[70] F ("..-.")
+[71] G ("--.")
+[72] H ("....")
+[73] I ("..")
+[74] J (".---")
+[75] K ("-.-")
+[76] L (".-..")
+[77] M ("--")
+[78] N ("-.")
+[79] O ("---")
+[80] P (".--.")
+[81] Q ("--.-")
+[82] R (".-.")
+[83] S ("...")
+[84] T ("-")
+[85] U ("..-")
+[86] V ("...-")
+[87] W (".--")
+[88] X ("-..-")
+[89] Y ("-.--")
+[90] Z ("--..")
+[95] _ ("..--.-")
+[97] a (".-")
+[98] b ("-...")
+[99] c ("-.-.")
+[100] d ("-..")
+[101] e (".")
+[102] f ("..-.")
+[103] g ("--.")
+[104] h ("....")
+[105] i ("..")
+[106] j (".---")
+[107] k ("-.-")
+[108] l (".-..")
+[109] m ("--")
+[110] n ("-.")
+[111] o ("---")
+[112] p (".--.")
+[113] q ("--.-")
+[114] r (".-.")
+[115] s ("...")
+[116] t ("-")
+[117] u ("..-")
+[118] v ("...-")
+[119] w (".--")
+[120] x ("-..-")
+[121] y ("-.--")
+[122] z ("--..")
+[192] À (".--.-")
+[196] Ä (".-.-")
+[199] Ç ("-.-..")
+[200] È (".-..-")
+[201] É ("..-..")
+[208] Ð ("..--.")
+[209] Ñ ("--.--")
+[214] Ö ("---.")
+[220] Ü ("..--")
+[222] Þ (".--..")
+[224] à (".--.-")
+[228] ä (".-.-")
+[231] ç ("-.-..")
+[232] è (".-..-")
+[233] é ("..-..")
+[240] ð ("..--.")
+[241] ñ ("--.--")
+[246] ö ("---.")
+[252] ü ("..--")
+[254] þ (".--..")
+[284] Ĝ ("--.-.")
+[285] ĝ ("--.-.")
+[292] Ĥ ("-.--.")
+[293] ĥ ("-.--.")
+[308] Ĵ (".---.")
+[309] ĵ (".---.")
+[348] Ŝ ("...-.")
+[349] ŝ ("...-.")
+[352] Š ("----")
+[353] š ("----")
+*/
+
+		class RevTableVal
 		{
-			(char[] btree, char[][] btrees, (int rowLen, int flatIdx)[] binaryRows) = GetMorseCodeDataStructures();
-
-			BTree = btree;
-			BTrees = btrees;
-			BinaryRows = binaryRows;
-
-			if(BTrees.Length != MCodeTreeDepth) // Depth = BTrees.Length;
-				throw new ArgumentException();
+			public bool[] Bits;
+			public string MCode;
 		}
 
 		/// <summary>
@@ -47,22 +181,19 @@ HVFÜLÄPJ BXCYZQÖŠ
 		/// using some standard binary-search methods, or if not exactly that,
 		/// still any solution will ultimately correlate in some ways to binary searching.
 		/// This is most fitting, as morse-code is indeed a pure binary representation, with
-		/// bits of 0s (., dots / 'dits') and 1s ('-', dashes / 'dahs'). 
+		/// bits of 0s (., dots / 'dits') and 1s ('-', dashes / 'dahs').
 		/// </summary>
-		/// <returns></returns>
-		public static (char[] btree, char[][] btrees, (int rowLen, int flatIdx)[] binaryRows)
-			GetMorseCodeDataStructures()
+		static MorseCode()
 		{
-			const int numRows = MCodeTreeDepth;
+			BTree = BTreeString
+				.Where(c => c != ' ' && c != '|' && c != '\r' && c != '\n')
+				.ToArray();
 
-			char[] btree = BTreeString.Where(c => c != ' ' && c != '|' && c != '\r' && c != '\n').ToArray();
-
-			char[][] btrees = new char[numRows][];
+			BTrees = new char[MCodeTreeDepth][];
 
 			var binRowsL = new List<(int idx, int len)>();
 
-			for(int i = 0; i < numRows; i++) {
-
+			for(int i = 0; i < MCodeTreeDepth; i++) {
 				if(i == 0) {
 					binRowsL.Add((0, 2));
 				}
@@ -76,29 +207,260 @@ HVFÜLÄPJ BXCYZQÖŠ
 				}
 			}
 
-			(int idx, int len)[] binRows = binRowsL.ToArray();
+			BinaryRows = binRowsL.ToArray();
 
-			for(int i = 0; i < numRows; i++) {
+			for(int i = 0; i < MCodeTreeDepth; i++) {
 
-				(int flatIdx, int rowLen) = binRows[i];
+				(int flatIdx, int rowLen) = BinaryRows[i];
 
-				char[] row = btrees[i] = new char[rowLen];
+				char[] row = BTrees[i] = new char[rowLen];
 
 				for(int j = 0; j < rowLen; j++) {
 					int rowIdx = flatIdx + j;
-					row[j] = btree[rowIdx];
+					row[j] = BTree[rowIdx];
 				}
 			}
 
-			return (btree, btrees, binRows);
+			if(BTrees.Length != MCodeTreeDepth)
+				throw new ArgumentException();
+
+			ReverseLookupTable = new RevTableVal[ReverseLookupTableLength];
+
+			for(int i = 0; i < 2; i++)
+				SetReverseLookupTable(0, i, new RevTableVal() { Bits = new bool[0] }, ReverseLookupTable);
+		}
+
+		public static string GetDisplayOfReverseLookupValues()
+		{
+			var sb = new StringBuilder(2048);
+
+			for(int i = 0; i < ReverseLookupTableLength; i++) {
+
+				RevTableVal revTbl = ReverseLookupTable[i];
+
+				if(revTbl != null) {
+
+					bool[] morseBits = revTbl.Bits;
+
+					sb.Append("[")
+						.Append(i)
+						.Append("] ")
+						.Append((char)i)
+						.Append(" (\"")
+						.Append(revTbl.MCode)
+						.Append("\")")
+						.AppendLine();
+
+					//for(int j = 0; j < morseBits.Length; j++) {
+					//	bool bVal = morseBits[j];
+					//	sb.Append(bVal ? '-' : '.');
+					//}
+				}
+			}
+
+			string disp = sb.ToString();
+			return disp;
+		}
+
+		/// <summary>
+		/// Recursive function that singularly builds the ReverseLookupTable
+		/// via the already set morse binary trees (nicely shares raw data input
+		/// without having to repeat).
+		/// </summary>
+		/// <param name="depth0"></param>
+		/// <param name="idx"></param>
+		/// <param name="parentVal"></param>
+		/// <param name="revLkpTable"></param>
+		static void SetReverseLookupTable(int depth0, int idx, RevTableVal parentVal, RevTableVal[] revLkpTable)
+		{
+			if(depth0 >= MCodeTreeDepth)
+				return;
+
+			char val = BTrees[depth0][idx];
+
+			// EVEN when val is not used (== '~'), some morse table values have a null parent
+			bool isOdd_ThusTrue = idx % 2 != 0;
+
+			bool[] newBits = parentVal.Bits.Concat(new bool[] { isOdd_ThusTrue }).ToArray();
+
+			RevTableVal newRTVal = new RevTableVal() {
+				Bits = newBits,
+				MCode = new string(newBits.Select(b => b ? '-' : '.').ToArray())
+			};
+
+			if(val != '~') {
+				int valNm = val;
+				if(valNm >= revLkpTable.Length)
+					throw new ArgumentOutOfRangeException();
+
+				char valLower = char.ToLower(val);
+				int valLwrNm = valLower;
+				if(valLwrNm >= revLkpTable.Length)
+					throw new ArgumentOutOfRangeException();
+
+				revLkpTable[valNm] = newRTVal;
+				revLkpTable[valLwrNm] = newRTVal;
+			}
+
+			int childDepth0 = depth0 + 1;
+
+			if(childDepth0 < MCodeTreeDepth) {
+				int childLeftIdx = idx * 2;
+				int thisDepthLen = PowerOf2(depth0 + 1);
+
+				// set left
+				SetReverseLookupTable(childDepth0, childLeftIdx, newRTVal, revLkpTable);
+				// set right
+				SetReverseLookupTable(childDepth0, childLeftIdx + 1, newRTVal, revLkpTable);
+			}
 		}
 
 
+
+		#region --- ENCODE ---
+
+		public string EncodeFullText(string text)
+		{
+			var sb = new StringBuilder(capacity: text.Length * 5);
+
+			EncodeFullText(text, c => sb.Append(c), str => sb.Append(str));
+
+			string val = sb.ToString();
+			return val;
+		}
+
+		public void EncodeFullText(string text, Action<char> writeChar, Action<string> writeStr)
+		{
+			if(string.IsNullOrEmpty(text))
+				return;
+
+			int len = text.Length;
+			int lastI = len - 1;
+			int lastWS = -1;
+
+			for(int i = 0; i < len; i++) {
+				char c = text[i];
+
+				void writeWordBreakIfLastWasNotWS()
+				{
+					if(lastWS != i - 1)
+						writeChar('/');
+					lastWS = i;
+				}
+
+				if(c < ReverseLookupTableLength) {
+					RevTableVal rvTbl = ReverseLookupTable[c];
+
+					if(rvTbl != null) {
+
+						bool[] mbits = rvTbl.Bits;
+
+						if(mbits.Length < 3) {
+							for(int j = 0; j < mbits.Length; j++) {
+								bool bit = mbits[j];
+								writeChar(bit ? '-' : '.');
+							}
+						}
+						else {
+							writeStr(rvTbl.MCode);
+						}
+
+						if(i != lastI)
+							writeChar(' ');
+
+						continue;
+					}
+					else {
+						switch(c) {
+							case ' ':
+								writeWordBreakIfLastWasNotWS();
+								writeChar(' ');
+								break;
+							case '\t':
+								writeWordBreakIfLastWasNotWS();
+								writeChar('\t');
+								break;
+							case '\n':
+								writeWordBreakIfLastWasNotWS();
+								writeChar('\r');
+								writeChar('\n');
+								break;
+							case '\r':
+								break;
+								// ignore, \r must ALWAYS be followed by \n anyways, just pick \n up next
+						}
+					}
+				}
+				else {
+					writeChar('#');
+					if(i != lastI)
+						writeChar(' ');
+				}
+
+				// can reach here two ways:
+				// 1) char was out of range
+				// 2) in range but still had no morse value
+				// what to do?!
+
+				// throw???
+			}
+		}
+
+		#endregion
+
+
+
+		#region --- DECODE ---
+
+		public char DecodeChar(string morse)
+			=> DecodeChar(SetBufferFromBitsString(morse), morse.Length);
+
+		public char DecodeChar(bool[] morse)
+			=> DecodeChar(morse, morse?.Length ?? 0);
+
 		/// <summary>
-		/// readonly means this can never be set to bool, or not to size of 6,
-		/// though vals can change
+		/// *visually* meditating on the tree-chart helped me to realize how this can be
+		/// done this way. Basically it's about getting down to the proper depth
+		/// (so if 4 morse code points / 4 true/falses, then dealing with 4th row / array
+		/// i.e. starting with index-depth (3 instead of 4) power of and working down, thus:
+		/// 'K':[1,0,1] (depth 3), == 2^2 [4] + [0: false stays 0] + 2^0 [1] = index 5
+		/// 'O':[1,1,1] (depth 3), == 2^2 + 2^1 + 2^0 = index 7
+		/// visually, if you have all falses, then no calculations ever are even needed,
+		/// so '...' will be arrayRow3[0], or: BTrees["...".Length - 1][0]
 		/// </summary>
-		readonly bool[] _buffer = new bool[MCodeTreeDepth];
+		/// <param name="morse">Bit code points, false is a dot, true a dash.
+		/// For high-perf concerns, set the length below allowing this array
+		/// to be a buffer that gets reused for every letter.</param>
+		/// <param name="len">Send in a length if the input array is being reused
+		/// as a buffer input (MUCH preferred if decoding more than just a few letters).</param>
+		public char DecodeChar(bool[] morse, int len)
+		{
+			if(morse == null) throw new ArgumentNullException(nameof(morse));
+			if(len < 1 || len > MCodeTreeDepth)
+				throw new ArgumentOutOfRangeException(nameof(morse));
+
+			int depth0 = len - 1;
+			int finalIdx = 0;
+
+			for(int i = 0; i <= depth0; i++) {
+				if(morse[i] == true) {
+					int addPowerOf = PowerOf2Arr[depth0 - i];
+					finalIdx += addPowerOf;
+				}
+			}
+
+			char val = BTrees[depth0][finalIdx];
+			return val;
+		}
+
+		public string DecodeFullTextToString(string morse)
+		{
+			char[] result = DecodeFullText(morse).ToArray();
+
+			string resultStr = new string(result);
+
+			return resultStr;
+		}
 
 		/// <summary>
 		/// Full text morse-code decoder, extremely HIGH-PERFORMANCE! Internally
@@ -109,7 +471,7 @@ HVFÜLÄPJ BXCYZQÖŠ
 		/// based dictionary lookup approach, it's just going to have to be profiled to
 		/// know for sure.
 		/// </summary>
-		public IEnumerable<char> DecodeFull(string morse)
+		public IEnumerable<char> DecodeFullText(string morse)
 		{
 			if(morse == null) throw new ArgumentNullException(nameof(morse));
 
@@ -120,7 +482,7 @@ HVFÜLÄPJ BXCYZQÖŠ
 			bool handleBreak()
 			{
 				if(j > 0) {
-					val = Find(_buffer, j);
+					val = DecodeChar(_encBuffer, j);
 					j = -1;
 					return true;
 				}
@@ -149,10 +511,10 @@ HVFÜLÄPJ BXCYZQÖŠ
 				}
 
 				switch(c) {
-					case '.': _buffer[j] = false; break;
-					case '-': _buffer[j] = true; break;
-					case '0': _buffer[j] = false; break;
-					case '1': _buffer[j] = true; break;
+					case '.': _encBuffer[j] = false; break;
+					case '-': _encBuffer[j] = true; break;
+					case '0': _encBuffer[j] = false; break;
+					case '1': _encBuffer[j] = true; break;
 					case ' ':
 					case '\t':
 					case '\r':
@@ -175,64 +537,24 @@ HVFÜLÄPJ BXCYZQÖŠ
 				yield return val;
 		}
 
-		public string DecodeFullToString(string morse)
-		{
-			char[] result = DecodeFull(morse).ToArray();
+		/// <summary>
+		/// readonly means this can never be set to bool, or not to size of 6,
+		/// though vals can change
+		/// </summary>
+		readonly bool[] _encBuffer = new bool[MCodeTreeDepth];
 
-			string resultStr = new string(result);
+		#endregion
 
-			return resultStr;
-		}
+
 
 		public bool[] SetBufferFromBitsString(string bitsStr)
 		{
 			int len = bitsStr.Length;
 			for(int i = 0; i < len; i++)
-				_buffer[i] = BitsCharToBool(bitsStr[i]);
-			return _buffer;
+				_encBuffer[i] = BitsCharToBool(bitsStr[i]);
+			return _encBuffer;
 		}
 
-		public char Find(string morse)
-			=> Find(SetBufferFromBitsString(morse), morse.Length);
-
-
-		public char Find(bool[] morse)
-			=> Find(morse, morse?.Length ?? 0);
-
-		/// <summary>
-		/// *visually* meditating on the tree-chart helped me to realize how this can be
-		/// done this way. Basically it's about getting down to the proper depth
-		/// (so if 4 morse code points / 4 true/falses, then dealing with 4th row / array
-		/// i.e. starting with index-depth (3 instead of 4) power of and working down, thus:
-		/// 'K':[1,0,1] (depth 3), == 2^2 [4] + [0: false stays 0] + 2^0 [1] = index 5
-		/// 'O':[1,1,1] (depth 3), == 2^2 + 2^1 + 2^0 = index 7
-		/// visually, if you have all falses, then no calculations ever are even needed,
-		/// so '...' will be arrayRow3[0], or: BTrees["...".Length - 1][0]
-		/// </summary>
-		/// <param name="morse">Bit code points, false is a dot, true a dash.
-		/// For high-perf concerns, set the length below allowing this array
-		/// to be a buffer that gets reused for every letter.</param>
-		/// <param name="len">Send in a length if the input array is being reused
-		/// as a buffer input (MUCH preferred if decoding more than just a few letters).</param>
-		public char Find(bool[] morse, int len)
-		{
-			if(morse == null) throw new ArgumentNullException(nameof(morse));
-			if(len < 1 || len > MCodeTreeDepth)
-				throw new ArgumentOutOfRangeException(nameof(morse));
-
-			int depth0 = len - 1;
-			int finalIdx = 0;
-
-			for(int i = 0; i <= depth0; i++) {
-				if(morse[i] == true) {
-					int addPowerOf = PowerOf2Arr[depth0 - i];
-					finalIdx += addPowerOf;
-				}
-			}
-
-			char val = BTrees[depth0][finalIdx];
-			return val;
-		}
 
 
 		#region --- Helpers ---

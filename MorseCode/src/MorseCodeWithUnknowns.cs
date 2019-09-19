@@ -11,57 +11,45 @@ namespace MorseCodeNS
 		bool?[] _morse;
 		int _depth0;
 		char[] _depthArr;
-		int _lastAdded;
+		int _lastAddedCount;
 
 		public Action<char> AddToOutput { get; private set; }
 		public List<char> Output { get; set; }
 
-		public MorseCodeWithUnknowns(Action<char> addToOutput = null)
+		public MorseCodeWithUnknowns(Action<char> addToOutput)
+			=> AddToOutput = addToOutput ?? throw new ArgumentNullException(nameof(addToOutput));
+
+
+		public static string GetPossibilities(string mcodeEOrs)
 		{
-			if(addToOutput == null) {
-				Output = new List<char>();
-				addToOutput = c => Output.Add(c);
-			}
-			AddToOutput = addToOutput;
+			bool?[] boolQuery = MorseCode.BitsStringToBoolsWithUnknowns(mcodeEOrs);
+
+			var outputSB = new System.Text.StringBuilder(20);
+
+			var m = new MorseCodeWithUnknowns(c => outputSB.Append(c));
+
+			int added = m.DecodeCharWithUnknowns(boolQuery);
+
+			string possibilities = outputSB.ToString();
+			return possibilities;
 		}
 
-		char AddOutput(int idx)
-		{
-			_lastAdded++;
-			char v = _depthArr[idx];
-			AddToOutput(v);
-			return v;
-		}
-
-		public IEnumerable<char> GetLastAdded()
-		{
-			var list = Output;
-			int count = Output?.Count ?? 0;
-
-			if(count < 1 || _lastAdded < 1)
-				yield break;
-
-			for(int i = count - _lastAdded; i < count; i++) {
-				char c = Output[i];
-				yield return c;
-			}
-		}
 
 		/// <summary>
-		/// Returns the count of chars that were possible decodings /
-		/// that were added to <see cref="Output"/>. Call
-		/// <see cref="GetL()"/> to get those values.
+		/// Returns the count of chars that were possible decodings.
 		/// NOTE: This uses state, is NOT multi-threaded.
 		/// </summary>
 		/// <param name="morse">Input, which may include uncertain signals
 		/// (represented as null inputs).</param>
-		public int FindWithEitherOrs(bool?[] morse)
+		public int DecodeCharWithUnknowns(bool?[] morse)
 		{
+			_lastAddedCount = 0;
+
 			int depth = morse?.Length ?? -1;
 			if(depth < 1 || depth > MorseCode.MCodeTreeDepth)
 				return 0;  // for later, signal deeper than we encoded (or just out of range)
 
-			_lastAdded = 0;
+			int _lastAdded = 0;
 			_morse = morse;
 			_depth0 = depth - 1; // make depth index of 0 based (simplifies calculations below, removes bunch of "-1s")
 			_depthArr = MorseCode.BTrees[_depth0];
@@ -74,6 +62,17 @@ namespace MorseCodeNS
 				_FindWithEitherOrs(0, 0);
 
 			return _lastAdded;
+		}
+
+
+		char AddOutput(int idx)
+		{
+			char v = _depthArr[idx];
+			if(v != '~') {
+				_lastAddedCount++;
+				AddToOutput(v);
+			}
+			return v;
 		}
 
 		/// <summary>
@@ -112,7 +111,7 @@ namespace MorseCodeNS
 		}
 
 		/// <summary>
-		/// Is the heart of <see cref="MorseCode.Find(bool[])"/> above, just
+		/// Is the heart of <see cref="MorseCode.DecodeChar(bool[])"/> above, just
 		/// with setup / error-checking already out of the way, and importantly,
 		/// inputing a nullable bool array, otherwise would have to alloc a new
 		/// bool array every time.
