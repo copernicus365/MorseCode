@@ -47,7 +47,9 @@ HVFÜLÄPJ BXCYZQÖŠ
 		/// 4) retrieving and using the boolean array which tells the morse values for
 		/// that char.
 		/// </summary>
-		static readonly RevTableVal[] ReverseLookupTable;
+		static readonly MorseCodeVal[] ReverseLookupTable;
+
+		static readonly Dictionary<string, char> EncRevDict;
 
 		public const int ReverseLookupTableLength = 354;
 
@@ -169,10 +171,11 @@ HVFÜLÄPJ BXCYZQÖŠ
 [353] š ("----")
 */
 
-		class RevTableVal
+		class MorseCodeVal
 		{
-			public bool[] Bits;
+			public char Val;
 			public string MCode;
+			public bool[] Bits;
 		}
 
 		/// <summary>
@@ -224,10 +227,21 @@ HVFÜLÄPJ BXCYZQÖŠ
 			if(BTrees.Length != MCodeTreeDepth)
 				throw new ArgumentException();
 
-			ReverseLookupTable = new RevTableVal[ReverseLookupTableLength];
+			ReverseLookupTable = new MorseCodeVal[ReverseLookupTableLength];
+			var mc = new MorseCode();
 
 			for(int i = 0; i < 2; i++)
-				SetReverseLookupTable(0, i, new RevTableVal() { Bits = new bool[0] }, ReverseLookupTable);
+				SetReverseLookupTable(0, i, new MorseCodeVal() { Bits = new bool[0] }, ReverseLookupTable, mc);
+
+			EncRevDict = new Dictionary<string, char>(ReverseLookupTableLength);
+
+			foreach(MorseCodeVal rvt in ReverseLookupTable)
+				if(rvt != null)
+					EncRevDict[rvt.MCode] = rvt.Val;
+
+			EncRevDict["\\"] = ' ';
+			EncRevDict["\n"] = '\n';
+			EncRevDict["\r"] = char.MinValue;
 		}
 
 		public static string GetDisplayOfReverseLookupValues()
@@ -236,7 +250,7 @@ HVFÜLÄPJ BXCYZQÖŠ
 
 			for(int i = 0; i < ReverseLookupTableLength; i++) {
 
-				RevTableVal revTbl = ReverseLookupTable[i];
+				MorseCodeVal revTbl = ReverseLookupTable[i];
 
 				if(revTbl != null) {
 
@@ -271,7 +285,7 @@ HVFÜLÄPJ BXCYZQÖŠ
 		/// <param name="idx"></param>
 		/// <param name="parentVal"></param>
 		/// <param name="revLkpTable"></param>
-		static void SetReverseLookupTable(int depth0, int idx, RevTableVal parentVal, RevTableVal[] revLkpTable)
+		static void SetReverseLookupTable(int depth0, int idx, MorseCodeVal parentVal, MorseCodeVal[] revLkpTable, MorseCode mc)
 		{
 			if(depth0 >= MCodeTreeDepth)
 				return;
@@ -283,9 +297,10 @@ HVFÜLÄPJ BXCYZQÖŠ
 
 			bool[] newBits = parentVal.Bits.Concat(new bool[] { isOdd_ThusTrue }).ToArray();
 
-			RevTableVal newRTVal = new RevTableVal() {
+			MorseCodeVal newRTVal = new MorseCodeVal() {
+				Val = mc.DecodeChar(newBits),
 				Bits = newBits,
-				MCode = new string(newBits.Select(b => b ? '-' : '.').ToArray())
+				MCode = new string(newBits.Select(b => b ? '-' : '.').ToArray()),		
 			};
 
 			if(val != '~') {
@@ -309,9 +324,9 @@ HVFÜLÄPJ BXCYZQÖŠ
 				int thisDepthLen = PowerOf2(depth0 + 1);
 
 				// set left
-				SetReverseLookupTable(childDepth0, childLeftIdx, newRTVal, revLkpTable);
+				SetReverseLookupTable(childDepth0, childLeftIdx, newRTVal, revLkpTable, mc);
 				// set right
-				SetReverseLookupTable(childDepth0, childLeftIdx + 1, newRTVal, revLkpTable);
+				SetReverseLookupTable(childDepth0, childLeftIdx + 1, newRTVal, revLkpTable, mc);
 			}
 		}
 
@@ -349,7 +364,7 @@ HVFÜLÄPJ BXCYZQÖŠ
 				}
 
 				if(c < ReverseLookupTableLength) {
-					RevTableVal rvTbl = ReverseLookupTable[c];
+					MorseCodeVal rvTbl = ReverseLookupTable[c];
 
 					if(rvTbl != null) {
 
@@ -462,6 +477,23 @@ HVFÜLÄPJ BXCYZQÖŠ
 			return resultStr;
 		}
 
+		public bool DecodeWithDictionary;
+
+		//static char[] DictSplitMCForDecode = { ' ', '\t', '\r', '\n' };
+		//public IEnumerable<char> DecodeFullTextWithDict(string morse)
+		//{
+		//	if(morse == null) throw new ArgumentNullException(nameof(morse));
+		//	//string[] vals = morse.Split(DictSplitMCForDecode,);
+		//	//for(int i = 0; i < vals.Length; i++) {
+		//	//}
+		//}
+
+		//static string GetMCFromBools(bool[] mc, int len)
+		//{
+		//	for(int i = 0; i < len; i++)
+		//		;
+		//}
+
 		/// <summary>
 		/// Full text morse-code decoder, extremely HIGH-PERFORMANCE! Internally
 		/// uses a single (boolean) buffer to decode the (string) morse values to, so each
@@ -477,11 +509,19 @@ HVFÜLÄPJ BXCYZQÖŠ
 
 			int len = morse.Length;
 			int j = 0;
+			int i = 0;
 			char val = char.MinValue;
 
 			bool handleBreak()
 			{
 				if(j > 0) {
+					if(DecodeWithDictionary) {
+						string ky = morse.Substring(i - j, j);
+						j = -1;				
+						val = EncRevDict[ky];
+						return val != char.MinValue;
+					}
+
 					val = DecodeChar(_encBuffer, j);
 					j = -1;
 					return true;
@@ -490,7 +530,7 @@ HVFÜLÄPJ BXCYZQÖŠ
 				return false;
 			}
 
-			for(int i = 0; i < len; i++, j++) {
+			for(; i < len; i++, j++) {
 
 				char c = morse[i];
 

@@ -9,6 +9,7 @@ namespace MorseCodeTests
 		void DecodeFullText(string expected, string mcode, bool pass = true)
 		{
 			var morseCode = new MorseCode();
+			morseCode.DecodeWithDictionary = false;
 
 			string result = morseCode.DecodeFullTextToString(mcode);
 

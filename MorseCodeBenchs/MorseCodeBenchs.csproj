@@ -1,0 +1,21 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>netcoreapp3.0</TargetFramework>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="BenchmarkDotNet" Version="0.11.5" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Reference Include="DotNetXtensions">
+      <HintPath>..\..\DotNetXtensions\DotNetXtensions\bin\Debug\netstandard2.0\DotNetXtensions.dll</HintPath>
+    </Reference>
+    <Reference Include="MorseCode">
+      <HintPath>..\MorseCode\bin\Release\netcoreapp3.0\MorseCode.dll</HintPath>
+    </Reference>
+  </ItemGroup>
+
+</Project>
